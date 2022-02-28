@@ -4,7 +4,9 @@ import os
 import glob
 import time
 import json
+import random
 import paho.mqtt.client as mqtt
+
 # import RPi.GPIO as GPIO
 
 # ================== CONFIGURATION ================== #
@@ -20,7 +22,7 @@ TEMPERATURE_TURN_ON_FAN = 50
 TEMPERATURE_TURN_OFF_FAN = 30
 
 STATION_ID = "STATION_ID_001"
-STATION_NAME ="STATION_NAME_001"
+STATION_NAME = "STATION_NAME_001"
 
 MQTT_USERNAME = "smart_fan"
 MQTT_PASSWORD = "IndustrySmartFanHT"
@@ -31,10 +33,23 @@ MQTT_TOPIC_STATUS = MQTT_TOPIC + "status"
 MQTT_TOPIC_CONFIG = MQTT_TOPIC + "config"
 MQTT_TOPIC_FAN = MQTT_TOPIC + "fan"
 
-data_payload = {"project_id":"SMARTFAN","project_name":"SMART FAN","station_id":"STATION_ID_XXX","station_name":"STATION_NAME_XXX","longitude":106.660172,"latitude":10.762622,"volt_battery":12.2,"volt_solar":5.3}
-data_status = [{"ss_name":"fan_temperature","ss_unit":"0C","ss_value":0},{"ss_name":"fan_humidity","ss_unit":"%","ss_value":0},{"ss_name":"temperature_on","ss_unit":"0C","ss_value":30.3},{"ss_name":"temperature_off","ss_unit":"0C","ss_value":20.25},{"ss_name":"mode_fan_auto","ss_unit":"","ss_value":1},{"ss_name":"fan_status","ss_unit":"","ss_value":1}]
-data_config = {"temperature_on":30.3,"temperature_off":20.25,"mode_fan_auto":1}
-data_fan_control = {"fan_status":1}
+data_payload = {"project_id": "SMARTFAN", "project_name": "SMART FAN", "station_id": "STATION_ID_XXX",
+                "station_name": "STATION_NAME_XXX", "longitude": 106.660172, "latitude": 10.762622,
+                "volt_battery": 12.2, "volt_solar": 5.3}
+data_status = [{"ss_name": "fan_temperature", "ss_unit": "0C", "ss_value": 0},
+               {"ss_name": "fan_humidity", "ss_unit": "%", "ss_value": 0},
+               {"ss_name": "temperature_max", "ss_unit": "0C", "ss_value": 30.3},
+               {"ss_name": "temperature_min", "ss_unit": "0C", "ss_value": 20.25},
+               {"ss_name": "mode_fan_auto", "ss_unit": "", "ss_value": 1},
+               {"ss_name": "fan_status", "ss_unit": "", "ss_value": 1}]
+data_config = {"temperature_max": 30.3, "temperature_min": 20.25, "mode_fan_auto": 1}
+data_fan_control = {"fan_status": 1}
+
+fan_status = 0
+temp_max = 30.3
+temp_min = 20.25
+mode_auto = 1
+
 
 # ================ FUNCTIONS DEFINE ================= #
 def setup_environment():
@@ -68,8 +83,8 @@ def read_temp():
 
 
 def get_status(fan_status):
-
     pass
+
 
 def control_gpio(pin25=None, pin28=None, pin29=None):
     # if pin25 is not None:
@@ -109,7 +124,40 @@ def on_connect(client, userdata, rc, *extra_params):
 
 
 def on_message(client, userdata, msg):
+    global fan_status, temp_max, temp_min, mode_auto
     print("Receive message: ", msg.payload)
+    try:
+        jsonObject = json.loads(msg.payload)
+        if msg.topic == MQTT_TOPIC_FAN:
+            if jsonObject["device_status"] == 0:
+                fan_status = jsonObject["fan_status"]
+                data_fan_control["fan_status"] = jsonObject["fan_status"]
+                data_fan_control["device_status"] = 1
+                time.sleep(2)
+                client.publish(MQTT_TOPIC_FAN, json.dumps(data_fan_control), 0, 1)
+
+        elif msg.topic == MQTT_TOPIC_CONFIG:
+            if jsonObject["temperature_max"] is not None:
+                temp_max = jsonObject["temperature_max"]
+            if jsonObject["temperature_min"] is not None:
+                temp_min = jsonObject["temperature_min"]
+            if jsonObject["mode_fan_auto"] is not None:
+                mode_auto = jsonObject["mode_fan_auto"]
+
+            data_payload['station_id'] = STATION_ID
+            data_payload['station_name'] = STATION_NAME
+            data_status[0]["ss_value"] = round(random.uniform(9.9, 49.9), 1)
+            data_status[1]["ss_value"] = round(random.uniform(50, 99), 1)
+            data_status[2]["ss_value"] = temp_max
+            data_status[3]["ss_value"] = temp_min
+            data_status[4]["ss_value"] = mode_auto
+            data_status[5]["ss_value"] = fan_status
+            data_payload['data_ss'] = data_status
+            data_payload['device_status'] = 1
+            time.sleep(2)
+            client.publish(MQTT_TOPIC_STATUS, json.dumps(data_payload), 0, 1)
+    except:
+        print("An exception occurred")
 
 
 # =================== START MAIN ==================== #
@@ -122,24 +170,31 @@ if __name__ == '__main__':
     client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
     client.connect(MQTT_HOST, MQTT_PORT)
     client.loop_start()
-    fan_status = False
 
     while True:
         # print(read_temp())
-        print("this is value:", 28.875)
+        # print("this is value:", 28.875)
+
         data_payload['station_id'] = STATION_ID
         data_payload['station_name'] = STATION_NAME
+        data_status[0]["ss_value"] = round(random.uniform(9.9, 49.9), 1)
+        data_status[1]["ss_value"] = round(random.uniform(50, 99), 1)
+        data_status[2]["ss_value"] = temp_max
+        data_status[3]["ss_value"] = temp_min
+        data_status[4]["ss_value"] = mode_auto
+        data_status[5]["ss_value"] = fan_status
         data_payload['data_ss'] = data_status
         data_payload['device_status'] = 0
-        data_fan_control['device_status'] = 0
-        client.publish(MQTT_TOPIC_FAN, json.dumps(data_fan_control), 0, 1)
         client.publish(MQTT_TOPIC_STATUS, json.dumps(data_payload), 0, 1)
-        print(MQTT_TOPIC_STATUS)
-        print(data_payload)
-        print()
-        print(MQTT_TOPIC_CONFIG)
-        print(data_config)
-        print()
-        print(MQTT_TOPIC_FAN)
-        print(data_fan_control)
-        time.sleep(10)
+        # data_fan_control['device_status'] = 0
+        # client.publish(MQTT_TOPIC_FAN, json.dumps(data_fan_control), 0, 1)
+        # client.publish(MQTT_TOPIC_STATUS, json.dumps(data_payload), 0, 1)
+        # print(MQTT_TOPIC_STATUS)
+        # print(data_payload)
+        # print()
+        # print(MQTT_TOPIC_CONFIG)
+        # print(data_config)
+        # print()
+        # print(MQTT_TOPIC_FAN)
+        # print(data_fan_control)
+        time.sleep(30)
