@@ -18,8 +18,8 @@ IO_CONTROL_PIN_25_MAP_TO_GPIO = 26
 IO_CONTROL_PIN_28_MAP_TO_GPIO = 20
 IO_CONTROL_PIN_29_MAP_TO_GPIO = 21
 
-TEMPERATURE_TURN_ON_FAN = 50
-TEMPERATURE_TURN_OFF_FAN = 30
+TEMPERATURE_CONTROL_FAN_MAX = 50
+TEMPERATURE_CONTROL_FAN_MIN = 30
 
 STATION_ID = "STATION_ID_001"
 STATION_NAME = "TRẠM 001"
@@ -37,19 +37,16 @@ data_payload = {"project_id": "SMARTFAN", "project_name": "SMART FAN", "station_
                 "station_name": "STATION_NAME_XXX", "longitude": 106.660172, "latitude": 10.762622,
                 "volt_battery": 12.2, "volt_solar": 5.3}
 data_status = [{"ss_name": "fan_temperature", "ss_unit": "0C", "ss_value": 0},
-               {"ss_name": "temperature_max", "ss_unit": "0C", "ss_value": 30.3},
-               {"ss_name": "temperature_min", "ss_unit": "0C", "ss_value": 20.25},
+               {"ss_name": "temperature_max", "ss_unit": "0C", "ss_value": TEMPERATURE_CONTROL_FAN_MAX},
+               {"ss_name": "temperature_min", "ss_unit": "0C", "ss_value": TEMPERATURE_CONTROL_FAN_MIN},
                {"ss_name": "mode_fan_auto", "ss_unit": "", "ss_value": 1},
                {"ss_name": "fan_status", "ss_unit": "", "ss_value": 1}]
 data_config = {"temperature_max": 30.3, "temperature_min": 20.25, "mode_fan_auto": 1}
 data_fan_control = {"fan_status": 1}
 
 fan_status = 0
-temp_max = 32.00
-temp_min = 20.25
 mode_auto = 1
 cur_temp = 0
-cur_humi = 0
 
 
 # ================ FUNCTIONS DEFINE ================= #
@@ -119,7 +116,7 @@ def on_connect(client, userdata, rc, *extra_params):
 
 
 def on_message(client, userdata, msg):
-    global fan_status, temp_max, temp_min, mode_auto
+    global fan_status, TEMPERATURE_CONTROL_FAN_MAX, TEMPERATURE_CONTROL_FAN_MIN, mode_auto
     print("Receive message: ", msg.payload)
     try:
         jsonObject = json.loads(msg.payload)
@@ -134,17 +131,17 @@ def on_message(client, userdata, msg):
 
         elif msg.topic == MQTT_TOPIC_CONFIG:
             if jsonObject["temperature_max"] is not None:
-                temp_max = jsonObject["temperature_max"]
+                TEMPERATURE_CONTROL_FAN_MAX = jsonObject["temperature_max"]
             if jsonObject["temperature_min"] is not None:
-                temp_min = jsonObject["temperature_min"]
+                TEMPERATURE_CONTROL_FAN_MIN = jsonObject["temperature_min"]
             if jsonObject["mode_fan_auto"] is not None:
                 mode_auto = jsonObject["mode_fan_auto"]
 
             data_payload['station_id'] = STATION_ID
             data_payload['station_name'] = STATION_NAME
             data_status[0]["ss_value"] = read_temp()
-            data_status[1]["ss_value"] = temp_max
-            data_status[2]["ss_value"] = temp_min
+            data_status[1]["ss_value"] = TEMPERATURE_CONTROL_FAN_MAX
+            data_status[2]["ss_value"] = TEMPERATURE_CONTROL_FAN_MIN
             data_status[3]["ss_value"] = mode_auto
             data_status[4]["ss_value"] = fan_status
             data_payload['data_ss'] = data_status
@@ -171,12 +168,12 @@ if __name__ == '__main__':
 
     while True:
         cur_temp = read_temp()
-        print("DEBUG: Current temperature", cur_temp, "| Max", temp_max, "| Min", temp_min)
+        print("DEBUG: Current temperature", cur_temp, "| Max", TEMPERATURE_CONTROL_FAN_MAX, "| Min", TEMPERATURE_CONTROL_FAN_MIN)
 
         if mode_auto == 1:
-            if cur_temp >= temp_max:
+            if cur_temp >= TEMPERATURE_CONTROL_FAN_MAX:
                 fan_status = 1
-            if cur_temp <= temp_min:
+            if cur_temp <= TEMPERATURE_CONTROL_FAN_MIN:
                 fan_status = 0
             fan_control(fan_status)
 
@@ -184,8 +181,8 @@ if __name__ == '__main__':
             data_payload['station_id'] = STATION_ID
             data_payload['station_name'] = STATION_NAME
             data_status[0]["ss_value"] = cur_temp
-            data_status[1]["ss_value"] = temp_max
-            data_status[2]["ss_value"] = temp_min
+            data_status[1]["ss_value"] = TEMPERATURE_CONTROL_FAN_MAX
+            data_status[2]["ss_value"] = TEMPERATURE_CONTROL_FAN_MIN
             data_status[3]["ss_value"] = mode_auto
             data_status[4]["ss_value"] = fan_status
             data_payload['data_ss'] = data_status
